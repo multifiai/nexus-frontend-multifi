@@ -237,8 +237,8 @@ export function FileBrowser() {
       <header className="relative z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-4 flex-1">
-            <img src="/nexus-logo.png" alt="Nexus Logo" className="h-10 w-10" />
-            <h1 className="text-2xl font-bold">Nexus Hub</h1>
+            <img src="/multifi-logo.svg" alt="MultiFi Hub Logo" className="h-10 w-10" />
+            <h1 className="text-2xl font-bold">MultiFi Hub</h1>
           </div>
           <div className="flex gap-2 items-center">
             {isAuthenticated ? (
@@ -363,7 +363,7 @@ export function FileBrowser() {
       {/* Footer */}
       <footer className="border-t bg-muted/20 px-4 py-2">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <div className="font-medium">Nexus Hub</div>
+          <div className="font-medium">MultiFi Hub</div>
           <div className="flex gap-3">
             <a href="https://github.com/nexi-lab/nexus" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
               Docs

@@ -309,7 +309,7 @@ function ChatPanelContent({
         {!chatStarted && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-muted-foreground">
-              <p className="text-lg mb-2">Welcome to NexusFS Chat!</p>
+              <p className="text-lg mb-2">Welcome to MultiFi Hub!</p>
               <p className="text-sm">Ask me anything about your files or data.</p>
             </div>
           </div>

@@ -52,7 +52,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       <DialogContent className="w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Login to NexusFS</DialogTitle>
+            <DialogTitle>Login to MultiFi Hub</DialogTitle>
             <DialogDescription>Enter your API key to access the file system</DialogDescription>
           </DialogHeader>
 
