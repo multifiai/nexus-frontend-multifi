@@ -8,6 +8,7 @@
 # Options:
 #   --firebase-project PROJECT_ID   Firebase project ID (required)
 #   --nexus-url URL                 Nexus server URL (default: https://nexus-server.multifi.ai)
+#   --langgraph-api-key KEY         LangGraph API key (or set LANGGRAPH_API_KEY env var)
 #   --build-only                    Only build, don't deploy
 #   --help                          Show this help message
 
@@ -23,6 +24,7 @@ NC='\033[0m'
 # Default values
 FIREBASE_PROJECT=""
 NEXUS_URL="https://nexus-server.multifi.ai"
+LANGGRAPH_API_KEY="${LANGGRAPH_API_KEY:-}"
 BUILD_ONLY=false
 
 # Parse arguments
@@ -34,6 +36,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --nexus-url)
             NEXUS_URL="$2"
+            shift 2
+            ;;
+        --langgraph-api-key)
+            LANGGRAPH_API_KEY="$2"
             shift 2
             ;;
         --build-only)
@@ -73,6 +79,11 @@ echo "Configuration:"
 echo "  Nexus Server URL: $NEXUS_URL"
 if [[ -n "$FIREBASE_PROJECT" ]]; then
     echo "  Firebase Project: $FIREBASE_PROJECT"
+fi
+if [[ -n "$LANGGRAPH_API_KEY" ]]; then
+    echo "  LangGraph API Key: ${LANGGRAPH_API_KEY:0:10}... (set)"
+else
+    echo "  LangGraph API Key: (not set)"
 fi
 echo ""
 
@@ -115,6 +126,12 @@ echo -e "${BLUE}Building frontend with Nexus URL: $NEXUS_URL${NC}"
 export VITE_NEXUS_API_URL="$NEXUS_URL"
 export VITE_NEXUS_SERVER_URL="$NEXUS_URL"
 export VITE_API_URL="$NEXUS_URL"
+
+# Set LangGraph API key if provided
+if [[ -n "$LANGGRAPH_API_KEY" ]]; then
+    export VITE_LANGGRAPH_API_KEY="$LANGGRAPH_API_KEY"
+    echo -e "${BLUE}LangGraph API key configured${NC}"
+fi
 
 npm run build
 

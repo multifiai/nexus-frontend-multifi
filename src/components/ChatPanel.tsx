@@ -711,10 +711,11 @@ export function ChatPanel({ isOpen, onClose, initialSelectedAgentId, openedFileP
       // Format: <user_id>,<agent_name>
       const sandboxName = selectedAgentId;
 
-      // Select provider based on whether Nexus is running locally
+      // Select provider based on Nexus server URL
+      // Use E2B for nexus-server.multifi.ai, otherwise use docker
       const baseURL = apiClient.getBaseURL();
-      const isLocalhost = baseURL.includes('localhost') || baseURL.includes('127.0.0.1');
-      const provider = isLocalhost ? 'docker' : 'e2b';
+      const isMultifiServer = baseURL.includes('nexus-server.multifi.ai');
+      const provider = isMultifiServer ? 'e2b' : 'docker';
 
       console.log(`[ChatPanel] Getting or creating sandbox with name: ${sandboxName}, provider: ${provider}`);
       setSandboxConnectStatus(`Creating sandbox with ${provider} provider...`);

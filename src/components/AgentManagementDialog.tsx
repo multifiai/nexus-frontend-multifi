@@ -147,8 +147,11 @@ export function AgentManagementDialog({ open, onOpenChange, onRegisterAgent, onA
       // Use get_or_create pattern with status verification
       const sandboxName = agentId;
 
-      // Select provider based on whether Nexus is running locally
-      const provider = 'docker'
+      // Select provider based on Nexus server URL
+      // Use E2B for nexus-server.multifi.ai, otherwise use docker
+      const baseURL = apiClient.getBaseURL();
+      const isMultifiServer = baseURL.includes('nexus-server.multifi.ai');
+      const provider = isMultifiServer ? 'e2b' : 'docker';
 
       console.log(`Getting or creating sandbox with name: ${sandboxName}, provider: ${provider}`);
 
