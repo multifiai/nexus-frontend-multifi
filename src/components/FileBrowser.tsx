@@ -1,11 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { BookOpen, Bot, Brain, Cloud, FolderPlus, Settings } from 'lucide-react';
+import { AlertCircle, BookOpen, Bot, Brain, Cloud, FolderPlus, Settings, User } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { AuthenticationError } from '../api/client';
 import { createFilesAPI } from '../api/files';
 import { useAuth } from '../contexts/AuthContext';
-import { fileKeys, useCreateDirectory, useDeleteFile, useUploadFile } from '../hooks/useFiles';
+import { fileKeys, useConnectors, useCreateDirectory, useDeleteFile, useFileList, useUploadFile } from '../hooks/useFiles';
 import type { FileInfo } from '../types/file';
 import { copyToClipboard } from '../utils';
 import { Breadcrumb } from './Breadcrumb';
@@ -16,19 +17,21 @@ import type { ContextMenuAction } from './FileContextMenu';
 import { FileUpload } from './FileUpload';
 import { FileVersionHistoryDialog } from './FileVersionHistoryDialog';
 import { LeftPanel } from './LeftPanel';
-import { LoginDialog } from './LoginDialog';
 import { ManagePermissionsDialog } from './ManagePermissionsDialog';
 import { ConnectorManagementDialog } from './ConnectorManagementDialog';
 import { RenameDialog } from './RenameDialog';
 import { StoreMemoryDialog } from './StoreMemoryDialog';
+import { LanguageSelector } from './LanguageSelector';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './ui/button';
+import { useTranslation } from '../i18n/useTranslation';
 
 export function FileBrowser() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isAuthenticated, logout, apiClient, userInfo } = useAuth();
+  const { isAuthenticated, isUserAuthenticated, logout, apiClient, userInfo, userAccount, userLogout } = useAuth();
+  const { t } = useTranslation();
   const filesAPI = useMemo(() => createFilesAPI(apiClient), [apiClient]);
   const [currentPath, setCurrentPath] = useState('/');
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
@@ -41,13 +44,17 @@ export function FileBrowser() {
   const [managePermissionsFile, setManagePermissionsFile] = useState<FileInfo | null>(null);
   const [versionHistoryFile, setVersionHistoryFile] = useState<FileInfo | null>(null);
   const [creatingNewItem, setCreatingNewItem] = useState<{ type: 'file' | 'folder'; parentPath: string } | null>(null);
-  const [loginDialogOpen, setLoginDialogOpen] = useState(!isAuthenticated);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [initialSelectedAgentId, setInitialSelectedAgentId] = useState<string | undefined>(undefined);
 
   const deleteMutation = useDeleteFile();
   const uploadMutation = useUploadFile();
   const createDirMutation = useCreateDirectory();
+  
+  // Check for authentication errors on initial load
+  const { error: rootError } = useFileList('/', true);
+  const { error: connectorsError } = useConnectors(true);
+  const authError = rootError instanceof AuthenticationError ? rootError : (connectorsError instanceof AuthenticationError ? connectorsError : null);
 
   // Handle agent selection from URL parameters
   useEffect(() => {
@@ -233,6 +240,37 @@ export function FileBrowser() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
+      {/* Global Authentication Error Banner */}
+      {authError && (
+        <div className="bg-destructive/10 border-b border-destructive/20 px-4 py-3">
+          <div className="flex items-center justify-between max-w-7xl mx-auto">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-destructive">{t('landing.authError')}</p>
+                <p className="text-xs text-destructive/80">{authError.message}</p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                // Use appropriate logout function
+                if (isUserAuthenticated) {
+                  userLogout();
+                } else {
+                  logout();
+                }
+                navigate('/login');
+              }}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            >
+              {t('landing.updateApiKey')}
+            </Button>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <header className="relative z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center justify-between p-4">
@@ -241,58 +279,69 @@ export function FileBrowser() {
             <h1 className="text-2xl font-bold">MultiFi Hub</h1>
           </div>
           <div className="flex gap-2 items-center">
-            {isAuthenticated ? (
+            {(isAuthenticated || isUserAuthenticated) ? (
               <>
-                {userInfo?.user && (
+                {/* Show user info from OAuth account or API key auth */}
+                {(userAccount?.email || userInfo?.user) && (
                   <span className="text-sm text-muted-foreground mr-2">
-                    <span className="font-medium">User:</span> {userInfo.user}
-                    {userInfo.tenant_id && (
+                    <span className="font-medium">{t('landing.user')}:</span> {userAccount?.email || userInfo?.user}
+                    {(userAccount?.tenant_id || userInfo?.tenant_id) && (
                       <>
                         <span className="mx-2">|</span>
-                        <span className="font-medium">Tenant:</span> {userInfo.tenant_id}
+                        <span className="font-medium">{t('landing.tenant')}:</span> {userAccount?.tenant_id || userInfo?.tenant_id}
                       </>
                     )}
                   </span>
                 )}
                 <Button variant="ghost" size="sm" onClick={() => navigate('/workspace')}>
                   <FolderPlus className="h-4 w-4 mr-2" />
-                  Workspace
+                  {t('landing.workspace')}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/memory')}>
                   <Brain className="h-4 w-4 mr-2" />
-                  Memory
+                  {t('landing.memory')}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/agent')}>
                   <Bot className="h-4 w-4 mr-2" />
-                  Agent
+                  {t('landing.agent')}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/connector')}>
                   <Cloud className="h-4 w-4 mr-2" />
-                  Connector
+                  {t('landing.connector')}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/skill')}>
                   <BookOpen className="h-4 w-4 mr-2" />
-                  Skill
+                  {t('landing.skill')}
                 </Button>
-                {userInfo?.is_admin && (
+                {(userAccount?.is_global_admin || userInfo?.is_admin) && (
                   <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
                     <Settings className="h-4 w-4 mr-2" />
-                    Admin
+                    {t('landing.admin')}
                   </Button>
                 )}
+                <Button variant="ghost" size="sm" onClick={() => navigate('/profile')}>
+                  <User className="h-4 w-4 mr-2" />
+                  Profile
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => {
-                    logout();
-                    setLoginDialogOpen(true);
+                    // Use appropriate logout function
+                    if (isUserAuthenticated) {
+                      userLogout();
+                    } else {
+                      logout();
+                    }
+                    navigate('/login');
                   }}
                 >
-                  Logout
+                  {t('common.logout')}
                 </Button>
               </>
             ) : (
-              <Button onClick={() => setLoginDialogOpen(true)}>Login</Button>
+              <Button onClick={() => navigate('/login')}>{t('common.login')}</Button>
             )}
+            <LanguageSelector />
             <ThemeToggle />
             <Button variant="ghost" size="icon" asChild>
               <a href="https://github.com/nexi-lab/nexus" target="_blank" rel="noopener noreferrer" aria-label="View on GitHub">
@@ -316,8 +365,8 @@ export function FileBrowser() {
           variant="ghost"
           size="icon"
           type="button"
-          aria-label={chatPanelOpen ? 'Hide AI panel' : 'Show AI panel'}
-          title={chatPanelOpen ? 'Hide AI panel' : 'Show AI panel'}
+          aria-label={chatPanelOpen ? t('landing.hideAiPanel') : t('landing.showAiPanel')}
+          title={chatPanelOpen ? t('landing.hideAiPanel') : t('landing.showAiPanel')}
           onClick={() => setChatPanelOpen((v) => !v)}
           className="flex-shrink-0"
         >
@@ -366,23 +415,21 @@ export function FileBrowser() {
           <div className="font-medium">MultiFi Hub</div>
           <div className="flex gap-3">
             <a href="https://github.com/nexi-lab/nexus" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-              Docs
+              {t('landing.docs')}
             </a>
             <span>|</span>
             <a href="https://nexus.nexilab.co/health" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-              API
+              {t('landing.api')}
             </a>
             <span>|</span>
             <a href="https://github.com/nexi-lab/nexus/issues" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-              Help
+              {t('landing.help')}
             </a>
           </div>
         </div>
       </footer>
 
       {/* Dialogs */}
-      <LoginDialog open={loginDialogOpen} onOpenChange={setLoginDialogOpen} />
-
       <FileUpload open={uploadDialogOpen} onOpenChange={setUploadDialogOpen} currentPath={uploadTargetPath} />
 
       <CreateFolderDialog open={createFolderDialogOpen} onOpenChange={setCreateFolderDialogOpen} currentPath={currentPath} />
