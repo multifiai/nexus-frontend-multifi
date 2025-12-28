@@ -44,6 +44,7 @@ interface AuthContextType {
   userLogout: () => void;
   updateUserProfile: (displayName?: string, avatarUrl?: string) => Promise<UserAccount>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -63,8 +64,8 @@ const getApiURL = () => {
     // This fixes Mixed Content errors when frontend is served over HTTPS
     if (storedUrl.startsWith('http://') && window.location.protocol === 'https:') {
       const httpsUrl = storedUrl.replace('http://', 'https://');
-      // Remove port 8080 if present (nginx handles this)
-      const cleanedUrl = httpsUrl.replace(':8080', '');
+      // Remove port 2026 if present (nginx handles this)
+      const cleanedUrl = httpsUrl.replace(':2026', '');
       localStorage.setItem(API_URL_STORAGE_KEY, cleanedUrl);
       return cleanedUrl;
     }
@@ -82,7 +83,7 @@ const getApiURL = () => {
   const apiURL =
     (import.meta as any).env.VITE_NEXUS_API_URL !== undefined && (import.meta as any).env.VITE_NEXUS_API_URL !== ''
       ? (import.meta as any).env.VITE_NEXUS_API_URL
-      : 'http://localhost:8080'; // Default to localhost:8080 if not configured
+      : 'http://localhost:2026'; // Default to localhost:2026 if not configured
   return apiURL;
 };
 
@@ -145,12 +146,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const tempClient = new NexusAPIClient(getApiURL(), undefined);
         tempClient.setAuthToken(jwtToken);
 
-        // Fetch fresh user data from backend
-        const freshUserData = await tempClient.authGetMe();
+        // Fetch user info using whoami (simpler and more reliable than /auth/me)
+        const whoamiData = await tempClient.whoami();
 
-        // Update user account with fresh data
-        setUserAccount(freshUserData);
-        localStorage.setItem(USER_ACCOUNT_STORAGE_KEY, JSON.stringify(freshUserData));
+        // Set userInfo directly from whoami response
+        if (whoamiData.authenticated) {
+          const userInfoData: UserInfo = {
+            subject_type: whoamiData.subject_type,
+            subject_id: whoamiData.subject_id,
+            tenant_id: whoamiData.tenant_id,
+            is_admin: whoamiData.is_admin,
+            user: whoamiData.user || whoamiData.subject_id,
+          };
+          setUserInfo(userInfoData);
+          localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify(userInfoData));
+
+          // Keep userAccount in sync (for OAuth users who need email, display_name, etc.)
+          // This is a simplified version - full account data comes from OAuth login response
+          if (userAccount) {
+            // Update tenant_id in userAccount from whoami (source of truth)
+            const updatedAccount = {
+              ...userAccount,
+              tenant_id: whoamiData.tenant_id || null,
+            };
+            setUserAccount(updatedAccount);
+            localStorage.setItem(USER_ACCOUNT_STORAGE_KEY, JSON.stringify(updatedAccount));
+          }
+        }
       } catch (error) {
         console.error('Failed to fetch user data:', error);
         // If token is invalid/expired, clear auth state
@@ -163,6 +185,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     fetchUserData();
   }, []); // Only run once on mount
+
+  // Sync userInfo from userAccount for OAuth users (when userAccount changes from login)
+  // This ensures FileTree and other components that rely on userInfo work properly
+  useEffect(() => {
+    if (userAccount && !userInfo) {
+      // Only set if userInfo is not already set (from fetchUserData above)
+      const derivedUserInfo: UserInfo = {
+        subject_type: 'user',
+        subject_id: userAccount.user_id,
+        tenant_id: userAccount.tenant_id || undefined,
+        is_admin: userAccount.is_global_admin,
+        user: userAccount.user_id,
+      };
+      setUserInfo(derivedUserInfo);
+      localStorage.setItem(USER_INFO_STORAGE_KEY, JSON.stringify(derivedUserInfo));
+    }
+  }, [userAccount, userInfo]);
 
   const login = async (newApiKey: string): Promise<UserInfo> => {
     // Create a temporary client with the new API key
@@ -303,8 +342,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const userLogout = () => {
     setJwtToken(null);
     setUserAccount(null);
+    setUserInfo(null);
     localStorage.removeItem(JWT_TOKEN_STORAGE_KEY);
     localStorage.removeItem(USER_ACCOUNT_STORAGE_KEY);
+    localStorage.removeItem(USER_INFO_STORAGE_KEY);
     localStorage.removeItem('nexus_user_api_key');
     localStorage.removeItem('nexus_tenant_id');
     apiClient.setAuthToken(null);
@@ -329,6 +370,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const deleteAccount = async (): Promise<void> => {
+    if (!userAccount) {
+      throw new Error('No user account found');
+    }
+
+    // Call deprovision_user RPC method
+    await apiClient.call('deprovision_user', {
+      user_id: userAccount.user_id,
+      tenant_id: userAccount.tenant_id,
+      delete_user_record: true,
+      force: false,
+    });
+
+    // Clear all local state and logout
+    userLogout();
+  };
+
   const value: AuthContextType = {
     // API Key authentication
     apiKey,
@@ -348,6 +406,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     userLogout,
     updateUserProfile,
     changePassword,
+    deleteAccount,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
